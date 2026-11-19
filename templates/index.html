@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Router Command Runner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #c9d1de;
+      --card: #ffffff;
+      --ink: #1b1d3a;
+      --muted: #7a8196;
+      --soft: #eef0f8;
+      --purple: #7a5cff;
+      --navy: #2b2d6e;
+      --orange: #ff6b2c;
+      --coral: #ff6a4d;
+      --teal: #5bb5c4;
+      --green: #2fb87a;
+      --code: #14162e;
+      --ease: cubic-bezier(.2, .8, .2, 1);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12142a; --card: #1c1f3d; --ink: #eef0ff; --muted: #9aa1c0;
+        --soft: #272b52; --code: #0c0e20;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { overflow-x: hidden; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif; line-height: 1.5;
+    }
+    .shell { max-width: 1180px; margin: 0 auto; padding: 36px 24px 72px; }
+
+    /* ---------- Header ---------- */
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+    h1 { margin: 0; font-size: clamp(1.6rem, 3.5vw, 2.3rem); font-weight: 800; letter-spacing: -0.03em; }
+    .sub { margin: 2px 0 0; color: var(--muted); font-size: .95rem; }
+    .head-right { display: flex; align-items: center; gap: 12px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+      background: var(--card); font-size: .85rem; font-weight: 600;
+    }
+    .chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+    .chip.ok i { background: var(--green); box-shadow: 0 0 0 4px rgba(47,184,122,.2); }
+    .chip.bad i { background: var(--coral); box-shadow: 0 0 0 4px rgba(255,106,77,.2); }
+    body.busy .chip i { background: var(--purple); animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(122,92,255,0); } 0% { box-shadow: 0 0 0 0 rgba(122,92,255,.5); } }
+
+    button.run {
+      position: relative; overflow: hidden; border: 0; cursor: pointer;
+      background: var(--navy); color: #fff; padding: 12px 24px; border-radius: 999px;
+      font: inherit; font-weight: 700; font-size: .95rem;
+      transition: transform .15s var(--ease), background .2s;
+    }
+    button.run:hover { background: var(--purple); }
+    button.run:active { transform: scale(.97); }
+    button.run:disabled { cursor: progress; background: var(--purple); }
+    button.run .fill { position: absolute; inset: 0; background: rgba(255,255,255,.22); transform: scaleX(0); transform-origin: left; }
+    button.run:disabled .fill { animation: fill 6s forwards cubic-bezier(.1,.7,.3,1); }
+    @keyframes fill { to { transform: scaleX(.92); } }
+    button.run span { position: relative; }
+    :focus-visible { outline: 3px solid #f2b705; outline-offset: 2px; }
+
+    /* ---------- Grid: settles flat from a tilt, like the reference ---------- */
+    .grid {
+      display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px;
+      animation: settle 1.1s var(--ease) both; transform-origin: 50% 0;
+    }
+    @keyframes settle {
+      from { opacity: 0; transform: perspective(1400px) rotateX(24deg) rotateZ(-7deg) translateY(60px) scale(.94); }
+    }
+    .card {
+      background: var(--card); border-radius: 28px; padding: 24px;
+      box-shadow: 0 14px 40px rgba(43, 45, 110, .08); min-width: 0;
+    }
+    .card h2 { margin: 0; font-size: 1rem; font-weight: 700; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .span-5 { grid-column: span 5; } .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; }
+    .span-7 { grid-column: span 7; } .span-12 { grid-column: span 12; }
+    @media (max-width: 960px) { .span-5, .span-3, .span-4, .span-7 { grid-column: span 12; } }
+
+    /* ---------- Gauge ---------- */
+    .gauge { position: relative; max-width: 330px; margin: 0 auto; }
+    .gauge svg { width: 100%; display: block; }
+    .g-track { fill: none; stroke: var(--soft); stroke-width: 15; stroke-linecap: round; }
+    .g-ticks { fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-dasharray: .1 5.1; opacity: .5; }
+    .g-value { fill: none; stroke: var(--purple); stroke-width: 15; stroke-linecap: round; animation: gauge 1.4s .3s var(--ease) both; }
+    @keyframes gauge { from { stroke-dashoffset: 100; } }
+    .g-read { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 28px; }
+    .g-read b { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; display: block; line-height: 1.1; }
+    .g-read small { color: var(--muted); font-size: .8rem; display: flex; align-items: center; gap: 6px; }
+    .g-read small i { width: 8px; height: 8px; border-radius: 50%; }
+    .pillbars { margin-top: 18px; display: grid; gap: 8px; }
+    .pillbar { display: flex; align-items: center; justify-content: space-between; border-radius: 999px; padding: 6px 14px; color: #fff; font-size: .8rem; font-weight: 600; transform-origin: left; animation: grow .9s .5s var(--ease) both; }
+    @keyframes grow { from { transform: scaleX(0); opacity: 0; } }
+
+    /* ---------- Gradient hero ---------- */
+    .hero {
+      background: linear-gradient(145deg, #ffb48f 0%, #e7a4d6 45%, #9aa6ff 100%);
+      color: #1b1d3a; display: flex; flex-direction: column; justify-content: space-between; min-height: 250px;
+    }
+    .hero .big { font-size: clamp(2.2rem, 4vw, 3rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+    .hero p { margin: 6px 0 0; font-weight: 500; }
+    .bars { display: flex; align-items: flex-end; gap: 10px; height: 90px; margin-top: 18px; }
+    .bars div { flex: 1; border-radius: 8px 8px 4px 4px; background: rgba(255,255,255,.55); transform-origin: bottom; animation: up .9s .6s var(--ease) both; }
+    .bars div:nth-child(2) { background: var(--purple); }
+    .bars div:nth-child(3) { background: var(--navy); }
+    @keyframes up { from { transform: scaleY(0); } }
+
+    /* ---------- Donut ---------- */
+    .donut-wrap { position: relative; max-width: 220px; margin: 0 auto; }
+    .donut-wrap svg { width: 100%; display: block; transform: rotate(-90deg); }
+    .d-ring { fill: none; stroke: var(--soft); stroke-width: 7; }
+    .d-seg { fill: none; stroke-width: 7; animation: seg 1.1s .4s var(--ease) both; }
+    @keyframes seg { from { stroke-dasharray: 0 100; } }
+    .d-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+    .d-center b { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+    .d-center small { color: var(--muted); font-size: .78rem; }
+    .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin-top: 14px; font-size: .82rem; color: var(--muted); }
+    .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+
+    /* ---------- Interface list ---------- */
+    .list { display: grid; }
+    .item {
+      display: grid; grid-template-columns: 1.4fr 1.2fr auto; align-items: center; gap: 12px;
+      padding: 12px 4px; border-top: 1px solid var(--soft); font-size: .92rem;
+      animation: slide .5s var(--ease) both; animation-delay: calc(.5s + var(--i) * 70ms);
+    }
+    @keyframes slide { from { opacity: 0; transform: translateX(-14px); } }
+    .item:first-child { border-top: 0; }
+    .item b { font-weight: 700; }
+    .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: .82rem; color: var(--muted); }
+    .pill { padding: 4px 12px; border-radius: 999px; font-size: .75rem; font-weight: 700; }
+    .pill.up { background: rgba(47,184,122,.16); color: var(--green); }
+    .pill.down { background: rgba(255,106,77,.16); color: var(--coral); }
+    .pill.admin { background: rgba(91,181,196,.2); color: #3a95a5; }
+
+    .facts { display: grid; gap: 0; }
+    .fact { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--soft); font-size: .92rem; }
+    .fact:first-child { border-top: 0; }
+    .fact span { color: var(--muted); }
+    .fact b { font-weight: 600; text-align: right; word-break: break-word; }
+
+    .empty { color: var(--muted); text-align: center; padding: 28px 8px; font-size: .92rem; }
+
+    /* ---------- Output tabs ---------- */
+    .tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; background: var(--soft); border-radius: 999px; padding: 4px; }
+    .tab { border: 0; background: none; color: var(--muted); font: inherit; font-size: .82rem; font-weight: 600; padding: 7px 16px; border-radius: 999px; cursor: pointer; transition: background .25s var(--ease), color .25s; }
+    .tab[aria-selected="true"] { background: var(--card); color: var(--ink); box-shadow: 0 2px 8px rgba(43,45,110,.12); }
+    .out { position: relative; margin-top: 14px; }
+    .out pre {
+      display: none; margin: 0; background: var(--code); color: #d6dcf5; border-radius: 18px;
+      padding: 18px 20px; font-family: "JetBrains Mono", Consolas, monospace; font-size: .8rem; line-height: 1.6;
+      overflow: auto; max-height: 440px;
+    }
+    .out pre.show { display: block; animation: fade .45s var(--ease); }
+    @keyframes fade { from { opacity: 0; transform: translateY(8px); } }
+    .copy { position: absolute; top: 12px; right: 16px; z-index: 1; background: rgba(255,255,255,.1); color: #d6dcf5; border: 0; border-radius: 999px; padding: 5px 14px; font: inherit; font-size: .78rem; cursor: pointer; transition: background .2s; }
+    .copy:hover { background: rgba(255,255,255,.2); }
+    .copy.done { background: var(--green); color: #fff; }
+
+    /* ---------- Error ---------- */
+    .error { background: rgba(255,106,77,.12); border: 1px solid var(--coral); border-radius: 20px; padding: 18px 22px; margin-bottom: 20px; animation: shake .5s var(--ease); }
+    @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+    .error strong { color: var(--coral); display: block; }
+    .error code { font-family: "JetBrains Mono", Consolas, monospace; font-size: .82rem; word-break: break-word; }
+    .error p { margin: 8px 0 0; font-size: .9rem; }
+
+    /* busy: cards breathe while Netmiko connects */
+    body.busy .card { animation: breathe 1.2s infinite ease-in-out; }
+    @keyframes breathe { 50% { opacity: .65; } }
+
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body class="{% if error %}is-bad{% endif %}">
+  <main class="shell">
+    <form method="POST" id="run-form">
+      <header>
+        <div>
+          <h1>Router command runner</h1>
+          <p class="sub">Run show commands on R1 over Telnet and read the results.</p>
+        </div>
+        <div class="head-right">
+          <span class="chip {% if error %}bad{% elif data %}ok{% endif %}"><i></i>
+            {% if error %}Connection failed{% elif data %}R1 connected{% else %}Not connected{% endif %}
+          </span>
+          <button type="submit" class="run" id="run-btn"><i class="fill"></i><span>Run commands</span></button>
+        </div>
+      </header>
+    </form>
+
+    {% if error %}
+    <div class="error" role="alert">
+      <strong>Could not connect to R1</strong>
+      <code>{{ error }}</code>
+      <p>{{ hint }}</p>
+    </div>
+    {% endif %}
+
+    <section class="grid" aria-live="polite">
+
+      <!-- Gauge -->
+      <article class="card span-5">
+        <div class="card-top"><h2>Interface health</h2></div>
+        <div class="gauge">
+          <svg viewBox="0 0 220 128" aria-hidden="true">
+            <path class="g-ticks" pathLength="100" d="M 6 114 A 104 104 0 0 1 214 114"/>
+            <path class="g-track" pathLength="100" d="M 20 114 A 90 90 0 0 1 200 114"/>
+            {% if data %}
+            <path class="g-value" pathLength="100" d="M 20 114 A 90 90 0 0 1 200 114"
+                  stroke-dasharray="100" stroke-dashoffset="{{ data.gauge_offset }}"/>
+            {% endif %}
+          </svg>
+          <div class="g-read">
+            <div><b>{{ data.up_pct if data else '-' }}{% if data %}%{% endif %}</b><small><i style="background:var(--purple)"></i>Up</small></div>
+            <div><b>{{ data.assigned_pct if data else '-' }}{% if data %}%{% endif %}</b><small><i style="background:var(--orange)"></i>IP assigned</small></div>
+          </div>
+        </div>
+        {% if data %}
+        <div class="pillbars">
+          <div class="pillbar" data-style="background:var(--navy); width: {{ [data.up_pct, 28]|max }}%"><span>Up</span><span>{{ data.counts.up }}</span></div>
+          <div class="pillbar" data-style="background:var(--purple); width: {{ [(data.counts.down * 100 / data.total)|round if data.total else 0, 28]|max }}%"><span>Down</span><span>{{ data.counts.down }}</span></div>
+          <div class="pillbar" data-style="background:var(--orange); width: {{ [(data.counts.admin * 100 / data.total)|round if data.total else 0, 28]|max }}%"><span>Admin down</span><span>{{ data.counts.admin }}</span></div>
+        </div>
+        {% endif %}
+      </article>
+
+      <!-- Gradient hero -->
+      <article class="card span-3 hero">
+        <div>
+          <div class="big">{{ data.total_lines if data else '0' }}</div>
+          <p>Lines collected<br>from R1</p>
+        </div>
+        {% if data %}
+        <div class="bars" title="Lines per command">
+          {% for b in data.bars %}<div data-style="height: {{ b.h }}%; animation-delay: {{ 0.6 + loop.index0 * 0.12 }}s" title="{{ b.cmd }}: {{ b.lines }}"></div>{% endfor %}
+        </div>
+        {% else %}
+        <p style="opacity:.7">Run the commands to fill this in.</p>
+        {% endif %}
+      </article>
+
+      <!-- Donut -->
+      <article class="card span-4">
+        <div class="card-top"><h2>Interface status</h2></div>
+        <div class="donut-wrap">
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <circle class="d-ring" cx="20" cy="20" r="15.9155"/>
+            {% if data %}{% for s in data.segments %}
+            <circle class="d-seg" cx="20" cy="20" r="15.9155" stroke="{{ s.color }}"
+                    stroke-dasharray="{{ s.dash }} {{ 100 - s.dash }}" stroke-dashoffset="{{ s.offset }}"
+                    data-style="animation-delay: {{ 0.4 + loop.index0 * 0.2 }}s"/>
+            {% endfor %}{% endif %}
+          </svg>
+          <div class="d-center"><b>{{ data.total if data else '-' }}</b><small>interfaces</small></div>
+        </div>
+        {% if data %}
+        <div class="legend">
+          {% for s in data.segments %}<span><i data-style="background:{{ s.color }}"></i>{{ s.label }} {{ s.count }}</span>{% endfor %}
+        </div>
+        {% endif %}
+      </article>
+
+      <!-- Interface list -->
+      <article class="card span-7">
+        <div class="card-top"><h2>Interfaces</h2><span class="mono">show ip interface brief</span></div>
+        {% if data and data.interfaces %}
+        <div class="list">
+          {% for i in data.interfaces %}
+          <div class="item" data-style="--i: {{ loop.index0 }}">
+            <b>{{ i.name }}</b>
+            <span class="mono">{{ i.ip }}</span>
+            <span class="pill {{ i.state }}">{{ 'Admin down' if i.state == 'admin' else i.status|capitalize + '/' + i.proto }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">Select Run commands to list the interfaces on R1.</div>
+        {% endif %}
+      </article>
+
+      <!-- Device -->
+      <article class="card span-5">
+        <div class="card-top"><h2>Device</h2></div>
+        <div class="facts">
+          <div class="fact"><span>Hostname</span><b>{{ data.hostname if data else 'R1' }}</b></div>
+          <div class="fact"><span>Address</span><b class="mono">{{ device.ip }}:{{ device.port }}</b></div>
+          <div class="fact"><span>Protocol</span><b>Telnet</b></div>
+          <div class="fact"><span>Platform</span><b>Cisco IOS</b></div>
+          {% if data %}
+          <div class="fact"><span>Model</span><b>{{ data.model }}</b></div>
+          <div class="fact"><span>IOS version</span><b>{{ data.ios }}</b></div>
+          <div class="fact"><span>Uptime</span><b>{{ data.uptime }}</b></div>
+          {% endif %}
+        </div>
+      </article>
+
+      <!-- Raw output with pill tabs -->
+      <article class="card span-12">
+        <div class="card-top">
+          <h2>Command output</h2>
+          {% if results %}
+          <div class="tabs" role="tablist">
+            {% for cmd in results %}<button type="button" class="tab" role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}" data-i="{{ loop.index0 }}">{{ cmd }}</button>{% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% if results %}
+        <div class="out">
+          <button type="button" class="copy">Copy</button>
+          {% for cmd, output in results.items() %}<pre class="{{ 'show' if loop.first }}">{{ output }}</pre>{% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">Output from each command shows up here.</div>
+        {% endif %}
+      </article>
+
+    </section>
+  </main>
+
+  <script>
+    // Apply per-element values from Python (kept out of style="" so the editor does not flag them)
+    document.querySelectorAll("[data-style]").forEach(function (el) { el.style.cssText = el.dataset.style; });
+
+    document.getElementById("run-form").addEventListener("submit", function () {
+      var btn = document.getElementById("run-btn");
+      document.body.classList.add("busy");
+      btn.disabled = true;
+      btn.querySelector("span").textContent = "Connecting to R1...";
+    });
+
+    var tabs = document.querySelectorAll(".tab"), panes = document.querySelectorAll(".out pre");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        tabs.forEach(function (t) { t.setAttribute("aria-selected", t === tab); });
+        panes.forEach(function (p, i) { p.classList.toggle("show", i === +tab.dataset.i); });
+      });
+    });
+
+    var copy = document.querySelector(".copy");
+    if (copy) copy.addEventListener("click", function () {
+      var text = document.querySelector(".out pre.show").innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        copy.textContent = "Copied"; copy.classList.add("done");
+        setTimeout(function () { copy.textContent = "Copy"; copy.classList.remove("done"); }, 1500);
+      });
+    });
+  </script>
+</body>
+</html>
